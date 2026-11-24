@@ -1,0 +1,10 @@
+node_modules/
+out/
+dist/
+release/
+resources/uv/
+resources/artifact-render/
+*.log
+.DS_Store
+.vite/
+coverage/

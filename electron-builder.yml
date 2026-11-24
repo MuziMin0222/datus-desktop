@@ -1,0 +1,46 @@
+appId: ai.datus.desktop
+productName: Datus Desktop
+copyright: Copyright © 2025-present DatusAI, Inc.
+
+directories:
+  buildResources: build
+  output: release/${version}
+
+files:
+  - out/**/*
+  - package.json
+
+extraResources:
+  - from: resources
+    to: resources
+    filter:
+      - '**/*'
+
+asar: true
+asarUnpack:
+  - resources/**
+
+mac:
+  target:
+    - dmg
+    - zip
+  category: public.app-category.developer-tools
+  hardenedRuntime: true
+  entitlements: build/entitlements.mac.plist
+  entitlementsInherit: build/entitlements.mac.plist
+  notarize: false
+
+win:
+  target:
+    - nsis
+  artifactName: ${productName}-${version}-${arch}.${ext}
+
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Development
+
+publish:
+  provider: github
+  releaseType: draft

@@ -1,0 +1,17 @@
+agent:
+  home: __DATUS_HOME__
+  logging:
+    level: INFO
+  providers: {}
+  services:
+    datasources: {}
+  nodes:
+    schema_linking:
+      matching_rate: fast
+  agentic_nodes: {}
+  storage:
+    embedding_device_type: cpu
+  permissions:
+    profile: __PERMISSION_PROFILE__
+  filesystem:
+    strict: true
