@@ -1,12 +1,33 @@
-# Datus Desktop
+<p align="center">
+  <strong>Datus Desktop · Open-Source Data Engineering Agent for the Desktop</strong>
+</p>
+
+<p align="center">
+  <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-D22128?logo=apache&logoColor=white" alt="License: Apache 2.0"></a>
+  <img src="https://img.shields.io/badge/Electron-38-47848F?logo=electron&logoColor=white" alt="Electron 38">
+  <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" alt="React 19">
+  <img src="https://img.shields.io/badge/version-0.1.0-informational" alt="Version 0.1.0">
+  <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(remote)-informational" alt="Platforms">
+  <a href="https://join.slack.com/t/datus-ai/shared_invite/zt-3g6h4fsdg-iOl5uNoz6A4GOc4xKKWUYg"><img src="https://img.shields.io/badge/Slack-join%20chat-4A154B?logo=slack&logoColor=white" alt="Slack"></a>
+</p>
+
+<p align="center">
+  <a href="https://datus.ai">Website</a> ·
+  <a href="https://docs.datus.ai/">Docs</a> ·
+  <a href="docs/使用.md">Usage</a> ·
+  <a href="docs/部署.md">Deployment</a> ·
+  <a href="https://github.com/MuziMin0222/datus-desktop/releases">Release Notes</a>
+</p>
+
+<p align="center">
+  English | <a href="README.zh.md">简体中文</a>
+</p>
+
+---
 
 Chat-first desktop client for [Datus-agent](https://github.com/Datus-ai/Datus-agent), built with Electron, React and
-TypeScript.
-
-## 中文文档
-
-- [部署文档](docs/部署.md) — 构建、打包、发布、自动更新、远程后端部署
-- [使用文档](docs/使用.md) — 首次配置、模型与数据源、对话、报表预览、权限、排障
+TypeScript. Ask questions about your data, generate and validate SQL, build semantic models, and preview reports and
+dashboards produced by the agent — with the same context engine and tools as the CLI.
 
 ## How it connects
 
@@ -21,6 +42,16 @@ The desktop app never re-implements the agent engine. It drives the existing `da
 The renderer talks to the backend with `fetch` (POST + `text/event-stream`); the main process injects the bearer token
 and `X-Datus-User-Id` header for the configured backend origin only. Tokens live in the OS keychain via Electron
 `safeStorage`.
+
+## Features
+
+- **Chat**: streaming markdown, thinking blocks, tool-call cards, interactive confirmations, stop/steer, token usage.
+- **Sub-agents**: Chat, Gen SQL, Ask Metrics, Semantic Modeling, Visual Report, Visual Dashboard, Gen Table, Gen Job.
+- **Sessions**: per-agent history, restore, delete.
+- **Settings**: model providers, datasources, permission profiles, workspace, connection, logs.
+- **Artifacts**: in-app report and dashboard preview through the `datus-artifact://` protocol and the vendored
+  `@datus/web-artifact-render` bundle.
+- **Updates**: `electron-updater` with a Settings → Updates panel.
 
 ## Backend requirements
 
@@ -42,7 +73,7 @@ datus-api --host 0.0.0.0 --port 8000 --datasource demo
 ```bash
 npm install
 npm run fetch:uv            # only needed to exercise the first-run local install
-npm run vendor:artifact     # optional: vendors the report/dashboard viewer bundle
+npm run vendor:artifact     # vendors the report/dashboard viewer bundle
 DATUS_DESKTOP_DEV=1 npm run dev
 ```
 
@@ -57,29 +88,24 @@ npm run build
 npm run dist:mac|dist:win|dist:linux
 ```
 
-## Updates
-
-Packaged builds check for updates against the GitHub release feed configured in `electron-builder.yml` (5 s after
-launch, and on demand from Settings → Updates). `electron-updater` downloads in the background and offers "Restart to
-install". Development builds report "Development builds do not auto-update"; set `DATUS_DESKTOP_DISABLE_UPDATES=1` to
-suppress checks in a packaged build.
-
-macOS auto-update requires the app to be signed and notarized before a release is published.
-
 ## Layout
 
 ```
-src/main/       Electron main process: window, security, settings, sidecar lifecycle, IPC
+src/main/       Electron main process: window, security, settings, sidecar lifecycle, IPC, artifacts, updates
 src/preload/    Narrow contextBridge API
 src/renderer/   React chat UI (SSE client, reducer, message/tool/interaction/artifact cards)
 src/shared/     Types shared by main, preload and renderer
-tests/unit/     Pure unit tests for the SSE parser and chat reducer
+tests/unit/     Unit tests for the SSE parser, chat reducer, proxy executor and artifact HTML
+tests/e2e/      Playwright Electron end-to-end tests
 ```
 
 ## Status
 
-- Phase 0/1: scaffold, secure window, local sidecar bootstrap, remote connection, settings — implemented.
-- Phase 2: chat streaming, sessions, history, stop/steer, interactions — implemented.
-- Artifacts: `datus-artifact://` viewer with the vendored `@datus/web-artifact-render` bundle (report + dashboard).
-- Updates: electron-updater wired with a Settings → Updates panel.
-- Tests: unit (SSE parser, reducer, proxy executor, artifact HTML) + Playwright Electron e2e shipped in CI.
+- Local backend bootstrap, remote connection, secure window and settings — implemented.
+- Streaming chat, sessions, history, stop/steer and interactions — implemented.
+- Report/dashboard artifact viewer — implemented and verified.
+- Auto-update wiring and Playwright Electron e2e — implemented.
+
+## License
+
+[Apache 2.0](LICENSE)
