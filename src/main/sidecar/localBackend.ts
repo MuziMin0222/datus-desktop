@@ -21,6 +21,7 @@ import { devPythonPath, ensureDirs, isDev, localModeSupported, paths, resolveWor
 interface AgentPin {
   datusAgentVersion: string
   pythonVersion: string
+  datusAgentWheel?: string
 }
 
 type StatusListener = (status: SidecarStatus) => void
@@ -160,7 +161,11 @@ export class LocalBackend {
       try {
         const marker = JSON.parse(readFileSync(p.markerFile, 'utf-8')) as AgentPin
         const installed = await runCapture(p.pythonPath, ['-c', 'import datus; print(datus.__version__)'])
-        if (marker.datusAgentVersion === pin.datusAgentVersion && installed === pin.datusAgentVersion) {
+        if (
+          marker.datusAgentVersion === pin.datusAgentVersion &&
+          (marker.datusAgentWheel ?? '') === (pin.datusAgentWheel ?? '') &&
+          installed === pin.datusAgentVersion
+        ) {
           this.log(`runtime up to date: datus-agent ${installed}`)
           return p.pythonPath
         }
@@ -178,7 +183,11 @@ export class LocalBackend {
       UV_PYTHON_INSTALL_DIR: join(p.runtimeDir, 'python')
     }
     const extraIndex = process.env.DATUS_PIP_INDEX
-    const pipArgs = ['pip', 'install', '--python', p.pythonPath, `datus-agent==${pin.datusAgentVersion}`]
+    // The companion wheel carries the desktop-facing backend changes
+    // (/health/live, token auth, config pinning, source=desktop) that the
+    // upstream PyPI release of the same version does not have.
+    const agentSpec = pin.datusAgentWheel?.trim() || `datus-agent==${pin.datusAgentVersion}`
+    const pipArgs = ['pip', 'install', '--python', p.pythonPath, agentSpec]
     if (extraIndex) pipArgs.push('--index-url', extraIndex)
 
     this.setStatus({ state: 'installing-python', message: `Installing Python ${pin.pythonVersion}` })
@@ -194,7 +203,10 @@ export class LocalBackend {
       onLine: (line) => this.log(`[uv] ${line}`)
     })
 
-    this.setStatus({ state: 'installing-agent', message: `Installing datus-agent ${pin.datusAgentVersion}` })
+    this.setStatus({
+      state: 'installing-agent',
+      message: `Installing datus-agent ${pin.datusAgentVersion}` + (pin.datusAgentWheel ? ' (desktop build)' : '')
+    })
     await run(p.uvPath, pipArgs, {
       env: uvEnv,
       onLine: (line) => this.log(`[uv] ${line}`)
