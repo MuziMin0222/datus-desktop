@@ -26,6 +26,7 @@ mac:
   target:
     - dmg
     - zip
+  artifactName: DatusDesktop-${version}-${arch}.${ext}
   category: public.app-category.developer-tools
   hardenedRuntime: true
   entitlements: build/entitlements.mac.plist
