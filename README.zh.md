@@ -12,8 +12,6 @@
 </p>
 
 <p align="center">
-  <a href="https://datus.ai">官网</a> ·
-  <a href="https://docs.datus.ai/">文档</a> ·
   <a href="docs/使用.md">使用文档</a> ·
   <a href="docs/部署.md">部署文档</a> ·
   <a href="https://github.com/MuziMin0222/datus-desktop/releases">发布日志</a>
