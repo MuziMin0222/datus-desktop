@@ -1,6 +1,6 @@
 {
   "name": "datus-desktop",
-  "version": "0.1.0",
+  "version": "0.4.5",
   "description": "Datus Desktop — chat-first desktop client for Datus-agent",
   "repository": "https://github.com/Datus-ai/datus-desktop.git",
   "main": "./out/main/index.js",
