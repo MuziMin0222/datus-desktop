@@ -11,8 +11,9 @@
     "dev": "electron-vite dev",
     "build": "electron-vite build",
     "preview": "electron-vite preview",
-    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json",
+    "typecheck": "tsc --noEmit -p tsconfig.node.json && tsc --noEmit -p tsconfig.web.json && tsc --noEmit -p tsconfig.e2e.json",
     "test:unit": "vitest run",
+    "test:e2e": "npm run build && playwright test",
     "test": "npm run typecheck && npm run test:unit",
     "format": "prettier --write \"src/**/*.{ts,tsx,css}\" \"*.{ts,json,yml}\"",
     "fetch:uv": "node scripts/fetch-uv.mjs",
@@ -30,6 +31,7 @@
     "zustand": "^5.0.8"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@tailwindcss/vite": "^4.1.14",
     "@types/node": "^24.0.0",
     "@types/react": "^19.2.0",

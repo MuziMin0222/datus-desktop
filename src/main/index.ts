@@ -3,18 +3,29 @@ import { join } from 'node:path'
 
 import { IPC, type PermissionProfile, type SaveConnectionInput, type TestRemoteInput } from '@shared/ipc'
 import { BackendController, normalizeBaseUrl } from './controller'
+import { registerArtifactProtocol, registerArtifactScheme } from './artifacts/artifactProtocol'
 import { installAuthHeaderInjection, installInsecureTlsPolicy, installNavigationPolicy } from './security'
 import { getSettings, setPermissionProfile, updateSettings } from './settings'
 import { localModeSupported, resolveWorkspace } from './sidecar/paths'
 import { ProxyToolExecutor } from './tools/proxyExecutor'
+import { checkForUpdates, getUpdateStatus, initAutoUpdater, onUpdateStatus, quitAndInstall } from './updates'
 
 let controller: BackendController
 let proxyExecutor: ProxyToolExecutor
+
+registerArtifactScheme()
 
 function broadcastStatus(): void {
   const status = controller.local.getStatus()
   for (const window of BrowserWindow.getAllWindows()) {
     window.webContents.send(IPC.statusEvent, status)
+  }
+}
+
+function broadcastUpdateStatus(): void {
+  const status = getUpdateStatus()
+  for (const window of BrowserWindow.getAllWindows()) {
+    window.webContents.send(IPC.updateStatusEvent, status)
   }
 }
 
@@ -82,6 +93,10 @@ function registerIpc(): void {
 
   ipcMain.handle(IPC.executeProxiedTool, (_event, request) => proxyExecutor.execute(request))
 
+  ipcMain.handle(IPC.getUpdateStatus, () => getUpdateStatus())
+  ipcMain.handle(IPC.checkForUpdates, () => checkForUpdates())
+  ipcMain.handle(IPC.installUpdate, () => quitAndInstall())
+
   ipcMain.handle(IPC.readLogs, () => controller.local.readLogs())
 }
 
@@ -90,6 +105,7 @@ app.whenReady().then(() => {
   proxyExecutor = new ProxyToolExecutor(() =>
     controller.settings.mode === 'local' ? resolveWorkspace(controller.settings) : null
   )
+  registerArtifactProtocol(() => controller.getAuthTarget())
   installAuthHeaderInjection(() => controller.getAuthTarget())
   installInsecureTlsPolicy(() => {
     const settings = controller.settings
@@ -103,6 +119,8 @@ app.whenReady().then(() => {
   })
   registerIpc()
   controller.local.onStatus(() => broadcastStatus())
+  initAutoUpdater()
+  onUpdateStatus(() => broadcastUpdateStatus())
 
   createWindow()
 

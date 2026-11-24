@@ -8,3 +8,7 @@ resources/artifact-render/
 .DS_Store
 .vite/
 coverage/
+test-results/
+playwright-report/
+blob-report/
+.idea/

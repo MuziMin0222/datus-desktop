@@ -1,3 +1,5 @@
+import { app } from 'electron'
+
 import type {
   BootstrapSnapshot,
   ConnectionInfo,
@@ -122,7 +124,8 @@ export class BackendController {
       settings: this.settings,
       status: this.local.getStatus(),
       connection: this.connectionInfo(),
-      hasRemoteToken: hasRemoteToken()
+      hasRemoteToken: hasRemoteToken(),
+      appVersion: app.getVersion()
     }
   }
 }

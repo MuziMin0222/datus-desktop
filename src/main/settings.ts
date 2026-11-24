@@ -1,8 +1,9 @@
-import { app, safeStorage } from 'electron'
+import { safeStorage } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 
 import { DEFAULT_SETTINGS, type DesktopSettings, type PermissionProfile, type SaveConnectionInput } from '@shared/ipc'
+import { dataRoot } from './sidecar/paths'
 
 interface PersistedSettings {
   settings: DesktopSettings
@@ -13,7 +14,7 @@ interface PersistedSettings {
 let cached: PersistedSettings | null = null
 
 function settingsFile(): string {
-  return join(app.getPath('userData'), 'settings.json')
+  return join(dataRoot(), 'settings.json')
 }
 
 function read(): PersistedSettings {
@@ -32,7 +33,7 @@ function read(): PersistedSettings {
 }
 
 function write(): void {
-  const dir = app.getPath('userData')
+  const dir = dataRoot()
   if (!existsSync(dir)) mkdirSync(dir, { recursive: true })
   writeFileSync(settingsFile(), JSON.stringify(cached, null, 2), { mode: 0o600 })
 }

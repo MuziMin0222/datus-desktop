@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 
-import type { BootstrapSnapshot, PermissionProfile } from '@shared/ipc'
+import type { BootstrapSnapshot, PermissionProfile, UpdateStatus } from '@shared/ipc'
 import { apiGet, apiPost, apiPut } from '../api/client'
 
 interface Props {
@@ -20,6 +20,27 @@ interface AgentConfigSummary {
 const PROFILES: PermissionProfile[] = ['normal', 'auto', 'dangerous']
 const MODEL_TYPES = ['openai', 'claude', 'deepseek', 'qwen', 'gemini', 'glm', 'kimi', 'minimax', 'openrouter']
 const DS_TYPES = ['sqlite', 'duckdb', 'snowflake', 'starrocks', 'postgresql', 'mysql']
+
+function describeUpdate(status: UpdateStatus): string {
+  switch (status.state) {
+    case 'idle':
+      return 'Not checked yet'
+    case 'checking':
+      return 'Checking for updates…'
+    case 'available':
+      return `Version ${status.version ?? ''} found, downloading…`
+    case 'downloading':
+      return `Downloading ${status.percent ?? 0}%`
+    case 'downloaded':
+      return `Version ${status.version ?? ''} ready — restart to install`
+    case 'up-to-date':
+      return 'You are up to date'
+    case 'error':
+      return status.message || 'Update check failed'
+    case 'disabled':
+      return status.message || 'Updates are disabled'
+  }
+}
 
 export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: Props) {
   const baseUrl = snapshot.connection.baseUrl as string
@@ -43,6 +64,12 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
   const [dsUser, setDsUser] = useState('')
   const [dsPassword, setDsPassword] = useState('')
   const [dsDatabase, setDsDatabase] = useState('')
+  const [update, setUpdate] = useState<UpdateStatus>({ state: 'idle' })
+
+  useEffect(() => {
+    void window.datus.getUpdateStatus().then(setUpdate)
+    return window.datus.onUpdateStatus(setUpdate)
+  }, [])
 
   useEffect(() => {
     apiGet<AgentConfigSummary>(baseUrl, '/api/v1/config/agent')
@@ -182,6 +209,28 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
               {logs}
             </pre>
           )}
+        </section>
+
+        <section className="mt-5 border-t border-[var(--border)] pt-4">
+          <h3 className="text-xs font-semibold uppercase tracking-wide text-[var(--muted)]">Updates</h3>
+          <p className="mt-1 text-[11px] text-[var(--muted)]">
+            Version {snapshot.appVersion} · {describeUpdate(update)}
+          </p>
+          <div className="mt-2 flex gap-2">
+            <button
+              className="btn"
+              disabled={update.state === 'checking' || update.state === 'disabled'}
+              onClick={() => void window.datus.checkForUpdates().then(setUpdate)}
+            >
+              Check for updates
+            </button>
+            {update.state === 'downloaded' && (
+              <button className="btn btn-primary" onClick={() => void window.datus.installUpdate()}>
+                Restart to install
+              </button>
+            )}
+          </div>
+          {update.state === 'error' && <p className="mt-2 text-xs text-[var(--danger)]">{update.message}</p>}
         </section>
 
         <section className="mt-5 border-t border-[var(--border)] pt-4">

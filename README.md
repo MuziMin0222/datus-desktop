@@ -3,6 +3,11 @@
 Chat-first desktop client for [Datus-agent](https://github.com/Datus-ai/Datus-agent), built with Electron, React and
 TypeScript.
 
+## 中文文档
+
+- [部署文档](docs/部署.md) — 构建、打包、发布、自动更新、远程后端部署
+- [使用文档](docs/使用.md) — 首次配置、模型与数据源、对话、报表预览、权限、排障
+
 ## How it connects
 
 The desktop app never re-implements the agent engine. It drives the existing `datus-api` REST + SSE service:
@@ -47,9 +52,19 @@ Dev mode expects a synced Datus-agent checkout at `../Datus-agent` (override wit
 ```bash
 npm run typecheck
 npm run test:unit
+npm run test:e2e        # builds the app, then drives it with Playwright against a local mock backend
 npm run build
 npm run dist:mac|dist:win|dist:linux
 ```
+
+## Updates
+
+Packaged builds check for updates against the GitHub release feed configured in `electron-builder.yml` (5 s after
+launch, and on demand from Settings → Updates). `electron-updater` downloads in the background and offers "Restart to
+install". Development builds report "Development builds do not auto-update"; set `DATUS_DESKTOP_DISABLE_UPDATES=1` to
+suppress checks in a packaged build.
+
+macOS auto-update requires the app to be signed and notarized before a release is published.
 
 ## Layout
 
@@ -64,5 +79,7 @@ tests/unit/     Pure unit tests for the SSE parser and chat reducer
 ## Status
 
 - Phase 0/1: scaffold, secure window, local sidecar bootstrap, remote connection, settings — implemented.
-- Phase 2: chat streaming, sessions, history, stop/steer, interactions — implemented; artifact HTML viewer and
-  datasource/model editors are next.
+- Phase 2: chat streaming, sessions, history, stop/steer, interactions — implemented.
+- Artifacts: `datus-artifact://` viewer with the vendored `@datus/web-artifact-render` bundle (report + dashboard).
+- Updates: electron-updater wired with a Settings → Updates panel.
+- Tests: unit (SSE parser, reducer, proxy executor, artifact HTML) + Playwright Electron e2e shipped in CI.

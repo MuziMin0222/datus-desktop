@@ -236,8 +236,10 @@ function InteractionCard({
 function ArtifactCard({ payload, baseUrl }: { payload: Record<string, unknown>; baseUrl: string }) {
   const [detail, setDetail] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
-  const kind = String(payload.kind ?? 'report')
+  const [preview, setPreview] = useState(false)
+  const kind = String(payload.kind ?? 'report') === 'dashboard' ? 'dashboard' : 'report'
   const slug = String(payload.slug ?? '')
+  const previewUrl = `datus-artifact://artifact/${kind}/${encodeURIComponent(slug)}`
 
   async function load(): Promise<void> {
     setError(null)
@@ -256,11 +258,52 @@ function ArtifactCard({ payload, baseUrl }: { payload: Record<string, unknown>; 
         {kind} · {slug}
         {payload.description ? ` · ${String(payload.description)}` : ''}
       </div>
-      <button className="btn mt-2" onClick={load}>
-        Fetch artifact detail
-      </button>
+      <div className="mt-2 flex gap-2">
+        <button className="btn btn-primary" onClick={() => setPreview(true)} disabled={!slug}>
+          Open preview
+        </button>
+        <button className="btn" onClick={load}>
+          JSON detail
+        </button>
+      </div>
       {error && <div className="mt-2 text-[var(--danger)]">{error}</div>}
       {detail && <pre className="mt-2 max-h-60 overflow-auto rounded bg-black/40 p-2 text-[11px]">{detail}</pre>}
+
+      {preview && (
+        <div className="fixed inset-0 z-30 flex flex-col bg-black/70 p-4" onClick={() => setPreview(false)}>
+          <div
+            className="mb-2 flex items-center justify-between text-xs text-white"
+            onClick={(event) => event.stopPropagation()}
+          >
+            <span>
+              {kind} · {slug}
+            </span>
+            <div className="flex gap-2">
+              <button className="btn" onClick={load}>
+                JSON detail
+              </button>
+              <button className="btn" onClick={() => setPreview(false)}>
+                Close
+              </button>
+            </div>
+          </div>
+          <div className="min-h-0 flex-1" onClick={(event) => event.stopPropagation()}>
+            <iframe
+              title={`${kind} ${slug}`}
+              src={previewUrl}
+              // The viewer reads document.cookie, so it needs a real origin.
+              // datus-artifact://artifact is distinct from the app renderer
+              // (file:// or the dev server), so same-origin here cannot reach
+              // the app DOM; scripts still cannot navigate the top frame.
+              sandbox="allow-scripts allow-forms allow-same-origin"
+              className="h-full w-full rounded-lg border border-[var(--border)] bg-white"
+            />
+          </div>
+          {detail && (
+            <pre className="mt-2 max-h-40 overflow-auto rounded bg-black/70 p-2 text-[11px] text-white">{detail}</pre>
+          )}
+        </div>
+      )}
     </div>
   )
 }

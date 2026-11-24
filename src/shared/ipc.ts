@@ -79,6 +79,17 @@ export interface BootstrapSnapshot {
   status: SidecarStatus
   connection: ConnectionInfo
   hasRemoteToken: boolean
+  appVersion: string
+}
+
+export type UpdateState =
+  'idle' | 'checking' | 'available' | 'downloading' | 'downloaded' | 'up-to-date' | 'error' | 'disabled'
+
+export interface UpdateStatus {
+  state: UpdateState
+  version?: string
+  percent?: number
+  message?: string
 }
 
 export interface ProxiedToolRequest {
@@ -103,6 +114,10 @@ export interface DesktopApi {
   stopLocal(): Promise<SidecarStatus>
   setPermissionProfile(profile: PermissionProfile): Promise<void>
   executeProxiedTool(request: ProxiedToolRequest): Promise<ToolExecutionResult>
+  getUpdateStatus(): Promise<UpdateStatus>
+  checkForUpdates(): Promise<UpdateStatus>
+  installUpdate(): Promise<void>
+  onUpdateStatus(listener: (status: UpdateStatus) => void): () => void
   onStatus(listener: (status: SidecarStatus) => void): () => void
   readLogs(): Promise<string>
 }
@@ -116,6 +131,10 @@ export const IPC = {
   stopLocal: 'datus:stop-local',
   setPermissionProfile: 'datus:set-permission-profile',
   executeProxiedTool: 'datus:execute-proxied-tool',
+  getUpdateStatus: 'datus:get-update-status',
+  checkForUpdates: 'datus:check-for-updates',
+  installUpdate: 'datus:install-update',
+  updateStatusEvent: 'datus:update-status',
   statusEvent: 'datus:status',
   readLogs: 'datus:read-logs'
 } as const

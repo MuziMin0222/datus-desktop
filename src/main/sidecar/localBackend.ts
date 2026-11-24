@@ -15,6 +15,7 @@ import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 
 import type { DesktopSettings, SidecarStatus } from '@shared/ipc'
 import { run, runCapture } from './exec'
+import { sanitizeProxyEnv } from './proxyEnv'
 import { devPythonPath, ensureDirs, isDev, localModeSupported, paths, resolveWorkspace, resourcePath } from './paths'
 
 interface AgentPin {
@@ -252,13 +253,13 @@ export class LocalBackend {
     this.log(`spawning: ${python} ${args.join(' ')} (cwd=${workspace})`)
     const child = spawn(python, args, {
       cwd: workspace,
-      env: {
+      env: sanitizeProxyEnv({
         ...process.env,
         PYTHONUNBUFFERED: '1',
         DATUS_API_TOKEN: this.token,
         FASTEMBED_CACHE_PATH: p.fastembedCache,
         UV_CACHE_DIR: p.uvCache
-      },
+      }),
       stdio: ['ignore', 'pipe', 'pipe']
     })
     this.child = child
