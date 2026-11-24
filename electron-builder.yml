@@ -6,6 +6,8 @@ directories:
   buildResources: build
   output: release/${version}
 
+afterSign: build/after-sign.js
+
 files:
   - out/**/*
   - package.json
