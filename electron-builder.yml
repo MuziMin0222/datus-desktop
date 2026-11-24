@@ -45,4 +45,6 @@ linux:
 
 publish:
   provider: github
-  releaseType: draft
+  owner: MuziMin0222
+  repo: datus-desktop
+  releaseType: release

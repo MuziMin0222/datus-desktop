@@ -2,7 +2,7 @@
   "name": "datus-desktop",
   "version": "0.4.5",
   "description": "Datus Desktop — chat-first desktop client for Datus-agent",
-  "repository": "https://github.com/Datus-ai/datus-desktop.git",
+  "repository": "https://github.com/MuziMin0222/datus-desktop.git",
   "main": "./out/main/index.js",
   "author": "DatusAI",
   "license": "Apache-2.0",

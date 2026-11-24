@@ -26,6 +26,12 @@ export function updatesSupported(): boolean {
   return app.isPackaged && process.env.DATUS_DESKTOP_DISABLE_UPDATES !== '1'
 }
 
+function formatError(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error)
+  const firstLine = raw.split(/\r?\n/)[0] || raw
+  return firstLine.length > 240 ? `${firstLine.slice(0, 240)}…` : firstLine
+}
+
 export function initAutoUpdater(): void {
   if (!updatesSupported()) {
     publish({
@@ -48,7 +54,7 @@ export function initAutoUpdater(): void {
   autoUpdater.on('update-downloaded', (info: UpdateInfo) =>
     publish({ state: 'downloaded', version: info.version, message: 'Restart to install' })
   )
-  autoUpdater.on('error', (error: Error) => publish({ state: 'error', message: error.message }))
+  autoUpdater.on('error', (error: Error) => publish({ state: 'error', message: formatError(error) }))
 
   setTimeout(() => {
     void checkForUpdates()
@@ -69,7 +75,7 @@ export async function checkForUpdates(): Promise<UpdateStatus> {
   try {
     await autoUpdater.checkForUpdates()
   } catch (cause) {
-    publish({ state: 'error', message: cause instanceof Error ? cause.message : String(cause) })
+    publish({ state: 'error', message: formatError(cause) })
   }
   return status
 }
