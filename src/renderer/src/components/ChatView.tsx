@@ -4,21 +4,11 @@ import type { ChatSessionItem, ChatSessionList, SSEMessagePayload } from '@share
 import type { BootstrapSnapshot, PermissionProfile } from '@shared/ipc'
 import { apiGet, apiPost } from '../api/client'
 import { decodeFrame, resumeChat, streamChat, type DecodedFrame } from '../api/sse'
+import { SLASH_COMMANDS, agentFromSessionId, chatAgent, parseSlashCommand } from '../chatAgents'
 import { chatReducer, collectToolResults, initialChatState, messagesFromHistory } from '../state/chatReducer'
 import { Composer } from './Composer'
 import { MessageItem } from './MessageItem'
 import { SettingsPanel } from './SettingsPanel'
-
-const SUBAGENTS = [
-  { id: 'chat', label: 'Chat' },
-  { id: 'gen_sql', label: 'Gen SQL' },
-  { id: 'ask_metrics', label: 'Ask Metrics' },
-  { id: 'semantic_modeling', label: 'Semantic Modeling' },
-  { id: 'gen_visual_report', label: 'Visual Report' },
-  { id: 'gen_visual_dashboard', label: 'Visual Dashboard' },
-  { id: 'gen_table', label: 'Gen Table' },
-  { id: 'gen_job', label: 'Gen Job' }
-]
 
 const PROFILES: PermissionProfile[] = ['normal', 'auto', 'dangerous']
 
@@ -39,29 +29,27 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
   const handledProxy = useRef(new Set<string>())
 
   const [sessions, setSessions] = useState<ChatSessionItem[]>([])
-  const [subagent, setSubagent] = useState('chat')
+  const [sessionAgent, setSessionAgent] = useState('chat')
   const [profile, setProfile] = useState<PermissionProfile>(snapshot.settings.permissionProfile)
   const [answered, setAnswered] = useState<Set<string>>(new Set())
   const [showSettings, setShowSettings] = useState(false)
 
-  const loadSessions = useCallback(
-    async (agent: string) => {
-      try {
-        const data = await apiGet<ChatSessionList>(
-          baseUrl,
-          `/api/v1/chat/sessions?limit=50&subagent_id=${encodeURIComponent(agent)}`
-        )
-        setSessions(data.sessions ?? [])
-      } catch {
-        setSessions([])
-      }
-    },
-    [baseUrl]
-  )
+  const loadSessions = useCallback(async () => {
+    try {
+      const data = await apiGet<ChatSessionList>(baseUrl, '/api/v1/chat/sessions?limit=50')
+      setSessions(data.sessions ?? [])
+    } catch {
+      setSessions([])
+    }
+  }, [baseUrl])
 
   useEffect(() => {
-    void loadSessions(subagent)
-  }, [loadSessions, subagent])
+    void loadSessions()
+  }, [loadSessions])
+
+  useEffect(() => {
+    if (state.sessionId) setSessionAgent(agentFromSessionId(state.sessionId))
+  }, [state.sessionId])
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
@@ -106,12 +94,15 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
     handledProxy.current.clear()
     dispatch({ type: 'reset' })
     setAnswered(new Set())
+    setSessionAgent('chat')
+    void loadSessions()
   }
 
   async function openSession(session: ChatSessionItem): Promise<void> {
     abortRef.current?.abort()
     handledProxy.current.clear()
     setAnswered(new Set())
+    setSessionAgent(agentFromSessionId(session.session_id))
     try {
       const data = await apiGet<{ messages: SSEMessagePayload[] }>(
         baseUrl,
@@ -128,7 +119,7 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
     try {
       await fetch(`${baseUrl}/api/v1/chat/sessions/${encodeURIComponent(sessionId)}`, { method: 'DELETE' })
       if (stateRef.current.sessionId === sessionId) newChat()
-      void loadSessions(subagent)
+      else void loadSessions()
     } catch {
       // surfaced on the next list refresh
     }
@@ -161,11 +152,27 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
       dispatch({ type: 'fail', message: cause instanceof Error ? cause.message : String(cause) })
     } finally {
       abortRef.current = null
-      void loadSessions(subagent)
+      void loadSessions()
     }
   }
 
   function send(text: string): void {
+    const parsed = parseSlashCommand(text)
+    if (parsed.error) {
+      dispatch({ type: 'fail', message: parsed.error })
+      return
+    }
+    if (stateRef.current.sessionId && parsed.agentId && parsed.agentId !== sessionAgent) {
+      dispatch({
+        type: 'fail',
+        message: `Start a new chat to switch agents; this session uses ${chatAgent(sessionAgent).label}.`
+      })
+      return
+    }
+
+    const agent = parsed.agentId ?? sessionAgent
+    if (!stateRef.current.sessionId && parsed.agentId) setSessionAgent(parsed.agentId)
+
     dispatch({ type: 'send' })
     dispatch({
       type: 'user',
@@ -174,14 +181,14 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
         role: 'user',
         depth: 0,
         parentActionId: null,
-        blocks: [{ kind: 'markdown', payload: { content: text } }]
+        blocks: [{ kind: 'markdown', payload: { content: parsed.message } }]
       }
     })
     void runStream({
-      message: text,
+      message: parsed.message,
       session_id: stateRef.current.sessionId ?? undefined,
       source,
-      subagent_id: subagent === 'chat' ? undefined : subagent,
+      subagent_id: agent === 'chat' ? undefined : agent,
       permission_mode: profile,
       stream_response: true
     })
@@ -259,31 +266,34 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
           </button>
         </div>
         <div className="mt-3 flex-1 overflow-auto px-2 pb-3">
-          {sessions.map((session) => (
-            <div
-              key={session.session_id}
-              className={`group flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-xs hover:bg-[#16202b] ${
-                state.sessionId === session.session_id ? 'bg-[#16202b]' : ''
-              }`}
-              onClick={() => void openSession(session)}
-            >
-              <div className="min-w-0 flex-1">
-                <div className="truncate">{session.user_query || 'Untitled session'}</div>
-                <div className="text-[10px] text-[var(--muted)]">
-                  {session.total_turns} turns · {session.token_count} tokens
-                </div>
-              </div>
-              <button
-                className="invisible text-[var(--muted)] hover:text-[var(--danger)] group-hover:visible"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  void deleteSession(session.session_id)
-                }}
+          {sessions.map((session) => {
+            const agent = chatAgent(agentFromSessionId(session.session_id))
+            return (
+              <div
+                key={session.session_id}
+                className={`group flex cursor-pointer items-start gap-2 rounded-lg px-2 py-2 text-xs hover:bg-[#16202b] ${
+                  state.sessionId === session.session_id ? 'bg-[#16202b]' : ''
+                }`}
+                onClick={() => void openSession(session)}
               >
-                ×
-              </button>
-            </div>
-          ))}
+                <div className="min-w-0 flex-1">
+                  <div className="truncate">{session.user_query || 'Untitled session'}</div>
+                  <div className="text-[10px] text-[var(--muted)]">
+                    {agent.label} · {session.total_turns} turns · {session.token_count} tokens
+                  </div>
+                </div>
+                <button
+                  className="invisible text-[var(--muted)] hover:text-[var(--danger)] group-hover:visible"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    void deleteSession(session.session_id)
+                  }}
+                >
+                  ×
+                </button>
+              </div>
+            )
+          })}
           {sessions.length === 0 && <div className="px-2 py-4 text-xs text-[var(--muted)]">No sessions yet.</div>}
         </div>
         <div className="border-t border-[var(--border)] p-3">
@@ -295,15 +305,22 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
 
       <main className="flex min-w-0 flex-1 flex-col">
         <header className="flex items-center gap-2 border-b border-[var(--border)] px-4 py-3">
-          <select className="input w-44" value={subagent} onChange={(event) => setSubagent(event.target.value)}>
-            {SUBAGENTS.map((item) => (
-              <option key={item.id} value={item.id}>
-                {item.label}
-              </option>
-            ))}
-          </select>
+          <span
+            data-testid="agent-mode"
+            className="rounded-full border border-[var(--border)] bg-[#16202b] px-2.5 py-1 text-xs text-[var(--text)]"
+            title={
+              sessionAgent === 'chat'
+                ? 'Natural-language requests are routed to the right sub-agent automatically.'
+                : 'This chat is pinned to the selected sub-agent.'
+            }
+          >
+            {sessionAgent === 'chat' ? 'Auto' : chatAgent(sessionAgent).label}
+          </span>
+          <span className="text-[11px] text-[var(--muted)]">
+            {sessionAgent === 'chat' ? 'natural-language routing' : 'fixed for this chat'}
+          </span>
           <select
-            className="input w-36"
+            className="input ml-auto w-36"
             value={profile}
             onChange={(event) => void changeProfile(event.target.value as PermissionProfile)}
           >
@@ -313,7 +330,7 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
               </option>
             ))}
           </select>
-          <div className="ml-auto text-xs text-[var(--muted)]">
+          <div className="text-xs text-[var(--muted)]">
             {state.streaming ? 'streaming…' : state.sessionId ? `session ${state.sessionId.slice(0, 8)}` : 'new chat'}
           </div>
         </header>
@@ -321,7 +338,7 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
         <div className="flex-1 space-y-5 overflow-auto p-5">
           {state.messages.length === 0 && (
             <div className="mt-20 text-center text-sm text-[var(--muted)]">
-              Ask a question, explore your catalog, or pick a sub-agent above.
+              Ask in natural language and Datus will choose the right capability. Type / in a new chat to pin an agent.
             </div>
           )}
           {state.messages.map((message) => (
@@ -338,7 +355,10 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
         </div>
 
         {state.error && (
-          <div className="mx-4 mb-2 rounded-lg border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-[var(--danger)]">
+          <div
+            role="alert"
+            className="mx-4 mb-2 rounded-lg border border-red-900/60 bg-red-950/30 px-3 py-2 text-xs text-[var(--danger)]"
+          >
             {state.error}
           </div>
         )}
@@ -349,6 +369,7 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
             onSend={send}
             onInsert={(text) => void insert(text)}
             onStop={() => void stop()}
+            commands={state.sessionId ? [] : SLASH_COMMANDS}
           />
           {state.usage && (
             <div className="mt-1 px-1 text-[11px] text-[var(--muted)]">

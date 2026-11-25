@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-D22128?logo=apache&logoColor=white" alt="License: Apache 2.0"></a>
   <img src="https://img.shields.io/badge/Electron-38-47848F?logo=electron&logoColor=white" alt="Electron 38">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" alt="React 19">
-  <img src="https://img.shields.io/badge/version-0.4.7-informational" alt="Version 0.4.7">
+  <img src="https://img.shields.io/badge/version-0.4.8-informational" alt="Version 0.4.8">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(remote)-informational" alt="Platforms">
   <a href="https://join.slack.com/t/datus-ai/shared_invite/zt-3g6h4fsdg-iOl5uNoz6A4GOc4xKKWUYg"><img src="https://img.shields.io/badge/Slack-join%20chat-4A154B?logo=slack&logoColor=white" alt="Slack"></a>
 </p>
@@ -41,8 +41,8 @@ TypeScript 构建。你可以直接在桌面窗口里问数、生成并校验 SQ
 ## 功能
 
 - **对话**：流式 Markdown、思考过程、工具调用卡片、交互确认、停止/纠偏、Token 用量。
-- **子 Agent**：Chat、Gen SQL、Ask Metrics、Semantic Modeling、Visual Report、Visual Dashboard、Gen Table、Gen Job。
-- **会话**：按子 Agent 查看历史、恢复、删除。
+- **自动子 Agent**：默认由 Chat 根据自然语言自动分派到 Gen SQL、Ask Metrics、Semantic Modeling、Visual Report、Visual Dashboard、Gen Table、Gen Job；新会话可用 `/sql`、`/metrics` 等命令固定 Agent。
+- **会话**：统一展示各 Agent 的历史，支持恢复与删除。
 - **设置**：模型、数据源、权限档位、工作区、连接、日志。
 - **产物预览**：通过 `datus-artifact://` 协议与内置的 `@datus/web-artifact-render` 预览报表和看板。
 - **自动更新**：基于 `electron-updater`，设置页提供更新检查与安装入口。

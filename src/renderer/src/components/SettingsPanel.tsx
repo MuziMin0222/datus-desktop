@@ -63,12 +63,14 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
   const [error, setError] = useState<string | null>(null)
 
   const [showModelForm, setShowModelForm] = useState(false)
+  const [editingModel, setEditingModel] = useState<string | null>(null)
   const [modelName, setModelName] = useState('')
   const [modelType, setModelType] = useState('openai')
   const [modelId, setModelId] = useState('')
   const [modelBaseUrl, setModelBaseUrl] = useState('')
   const [modelApiKey, setModelApiKey] = useState('')
 
+  const [editingDatasource, setEditingDatasource] = useState<string | null>(null)
   const [dsName, setDsName] = useState('')
   const [dsType, setDsType] = useState('sqlite')
   const [dsUri, setDsUri] = useState('')
@@ -134,26 +136,60 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
     }
   }
 
+  function resetModelForm(): void {
+    setShowModelForm(false)
+    setEditingModel(null)
+    setModelName('')
+    setModelType('openai')
+    setModelId('')
+    setModelBaseUrl('')
+    setModelApiKey('')
+  }
+
+  function openAddModel(): void {
+    resetModelForm()
+    setError(null)
+    setMessage(null)
+    setShowModelForm(true)
+  }
+
+  function editModel(alias: string): void {
+    const config = agentConfig?.models?.[alias] ?? {}
+    setError(null)
+    setMessage(null)
+    setEditingModel(alias)
+    setModelName(alias)
+    setModelType(typeof config.type === 'string' ? config.type : 'openai')
+    setModelId(typeof config.model === 'string' ? config.model : '')
+    setModelBaseUrl(typeof config.base_url === 'string' ? config.base_url : '')
+    setModelApiKey(typeof config.api_key === 'string' ? config.api_key : '')
+    setShowModelForm(true)
+  }
+
   async function saveModel(): Promise<void> {
     setError(null)
     setMessage(null)
-    if (!modelName.trim() || !modelId.trim()) {
+    const alias = editingModel ?? modelName.trim()
+    if (!alias || !modelId.trim()) {
       setError('Model alias and model id are required.')
       return
     }
     try {
-      const alias = modelName.trim()
-      await apiPut(baseUrl, '/api/v1/config/models', {
-        models: { ...(agentConfig?.models ?? {}), [alias]: modelPayload() },
-        target: alias
-      })
+      const entry: Record<string, unknown> = {
+        ...(editingModel ? (agentConfig?.models?.[editingModel] ?? {}) : {}),
+        type: modelType,
+        model: modelId.trim()
+      }
+      if (modelBaseUrl.trim()) entry.base_url = modelBaseUrl.trim()
+      else delete entry.base_url
+      if (modelApiKey.trim()) entry.api_key = modelApiKey.trim()
+      else delete entry.api_key
+
+      const models = { ...(agentConfig?.models ?? {}), [alias]: entry }
+      await apiPut(baseUrl, '/api/v1/config/models', editingModel ? { models } : { models, target: alias })
       await loadAgentConfig()
-      setShowModelForm(false)
-      setModelName('')
-      setModelId('')
-      setModelBaseUrl('')
-      setModelApiKey('')
-      setMessage(`Saved model "${alias}" and made it the active target.`)
+      resetModelForm()
+      setMessage(editingModel ? `Saved model "${alias}".` : `Saved model "${alias}" and made it the active target.`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -185,39 +221,75 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
     try {
       await apiPut(baseUrl, '/api/v1/config/models', payload)
       await loadAgentConfig()
+      if (editingModel === alias) resetModelForm()
       setMessage(`Deleted model "${alias}".`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
   }
 
+  function resetDatasourceForm(): void {
+    setEditingDatasource(null)
+    setDsName('')
+    setDsType('sqlite')
+    setDsUri('')
+    setDsHost('')
+    setDsPort('')
+    setDsUser('')
+    setDsPassword('')
+    setDsDatabase('')
+  }
+
+  function editDatasource(name: string): void {
+    const config = agentConfig?.datasources?.[name] ?? {}
+    setError(null)
+    setMessage(null)
+    setEditingDatasource(name)
+    setDsName(name)
+    setDsType(typeof config.type === 'string' ? config.type : 'sqlite')
+    setDsUri(typeof config.uri === 'string' ? config.uri : '')
+    setDsHost(typeof config.host === 'string' ? config.host : '')
+    setDsPort(config.port === undefined || config.port === null ? '' : String(config.port))
+    setDsUser(typeof config.username === 'string' ? config.username : '')
+    setDsPassword(typeof config.password === 'string' ? config.password : '')
+    setDsDatabase(typeof config.database === 'string' ? config.database : '')
+  }
+
   async function saveDatasource(): Promise<void> {
     setError(null)
     setMessage(null)
-    if (!dsName.trim()) {
+    const name = editingDatasource ?? dsName.trim()
+    if (!name) {
       setError('Datasource name is required.')
       return
     }
-    const entry: Record<string, unknown> = { type: dsType }
+    const existing = editingDatasource ? (agentConfig?.datasources?.[editingDatasource] ?? {}) : {}
+    const entry: Record<string, unknown> = { ...existing, type: dsType }
+    const wasFileBacked = existing.type === 'sqlite' || existing.type === 'duckdb'
     if (dsType === 'sqlite' || dsType === 'duckdb') {
       if (!dsUri.trim()) {
         setError('A database path is required.')
         return
       }
       entry.uri = dsUri.trim()
+      for (const key of ['host', 'port', 'username', 'password', 'database']) delete entry[key]
     } else {
       entry.host = dsHost.trim()
       if (dsPort.trim()) entry.port = Number(dsPort.trim())
+      else delete entry.port
       entry.username = dsUser.trim()
       if (dsPassword) entry.password = dsPassword
+      else delete entry.password
       entry.database = dsDatabase.trim()
+      if (wasFileBacked) delete entry.uri
     }
     try {
       await apiPut(baseUrl, '/api/v1/config/datasources', {
-        datasources: { ...(agentConfig?.datasources ?? {}), [dsName.trim()]: entry }
+        datasources: { ...(agentConfig?.datasources ?? {}), [name]: entry }
       })
       await loadAgentConfig()
-      setMessage(`Saved datasource "${dsName.trim()}".`)
+      resetDatasourceForm()
+      setMessage(`Saved datasource "${name}".`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
     }
@@ -238,6 +310,7 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
     try {
       await apiPut(baseUrl, '/api/v1/config/datasources', { datasources })
       await loadAgentConfig()
+      if (editingDatasource === name) resetDatasourceForm()
       setMessage(`Deleted datasource "${name}".`)
     } catch (cause) {
       setError(cause instanceof Error ? cause.message : String(cause))
@@ -250,6 +323,8 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
       ? `${agentConfig.target_provider}/${agentConfig.target_model}`
       : ''
   const activeTarget = providerTarget ? '' : (agentConfig?.target ?? '')
+  const modelTypeChoices = MODEL_TYPES.includes(modelType) ? MODEL_TYPES : [modelType, ...MODEL_TYPES]
+  const datasourceTypeChoices = DS_TYPES.includes(dsType) ? DS_TYPES : [dsType, ...DS_TYPES]
 
   return (
     <div className="fixed inset-0 z-10 grid place-items-center overflow-auto bg-black/60 p-6" onClick={onClose}>
@@ -329,10 +404,11 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                   <div>
                     <h3 className="text-lg font-semibold">Models</h3>
                     <p className="mt-1 text-xs text-[var(--muted)]">
-                      Manage custom models with your own API key. Active target: {activeTarget || providerTarget || 'none'}
+                      Manage custom models with your own API key. Active target:{' '}
+                      {activeTarget || providerTarget || 'none'}
                     </p>
                   </div>
-                  <button className="btn btn-primary" onClick={() => setShowModelForm((value) => !value)}>
+                  <button className="btn btn-primary" onClick={openAddModel}>
                     + Add model
                   </button>
                 </div>
@@ -393,6 +469,15 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                         />
                         <button
                           type="button"
+                          className="text-xs text-[var(--muted)] hover:text-[var(--text)]"
+                          aria-label={`Edit ${alias}`}
+                          title={`Edit ${alias}`}
+                          onClick={() => editModel(alias)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
                           className="text-xs text-[var(--muted)] hover:text-[var(--danger)]"
                           aria-label={`Delete ${alias}`}
                           title={`Delete ${alias}`}
@@ -407,12 +492,13 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
 
                 {showModelForm && (
                   <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-4">
-                    <div className="text-sm font-medium">Add model</div>
+                    <div className="text-sm font-medium">{editingModel ? 'Edit model' : 'Add model'}</div>
                     <div className="mt-3 grid grid-cols-2 gap-2">
                       <input
-                        className="input"
+                        className={`input ${editingModel ? 'opacity-60' : ''}`}
                         placeholder="alias (e.g. my-gpt)"
                         value={modelName}
+                        readOnly={editingModel !== null}
                         onChange={(event) => setModelName(event.target.value)}
                       />
                       <select
@@ -420,7 +506,7 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                         value={modelType}
                         onChange={(event) => setModelType(event.target.value)}
                       >
-                        {MODEL_TYPES.map((item) => (
+                        {modelTypeChoices.map((item) => (
                           <option key={item} value={item}>
                             {item}
                           </option>
@@ -451,9 +537,9 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                         Test
                       </button>
                       <button className="btn btn-primary" onClick={saveModel}>
-                        Save &amp; activate
+                        {editingModel ? 'Save changes' : 'Save & activate'}
                       </button>
-                      <button className="btn" onClick={() => setShowModelForm(false)}>
+                      <button className="btn" onClick={resetModelForm}>
                         Cancel
                       </button>
                     </div>
@@ -503,6 +589,15 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                         )}
                         <button
                           type="button"
+                          className="text-xs text-[var(--muted)] hover:text-[var(--text)]"
+                          aria-label={`Edit ${name}`}
+                          title={`Edit ${name}`}
+                          onClick={() => editDatasource(name)}
+                        >
+                          Edit
+                        </button>
+                        <button
+                          type="button"
                           className="text-xs text-[var(--muted)] hover:text-[var(--danger)]"
                           aria-label={`Delete ${name}`}
                           title={`Delete ${name}`}
@@ -519,16 +614,17 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                 </div>
 
                 <div className="mt-4 rounded-xl border border-[var(--border)] bg-[var(--panel-2)] p-4">
-                  <div className="text-sm font-medium">Add datasource</div>
+                  <div className="text-sm font-medium">{editingDatasource ? 'Edit datasource' : 'Add datasource'}</div>
                   <div className="mt-3 grid grid-cols-2 gap-2">
                     <input
-                      className="input"
+                      className={`input ${editingDatasource ? 'opacity-60' : ''}`}
                       placeholder="name"
                       value={dsName}
+                      readOnly={editingDatasource !== null}
                       onChange={(event) => setDsName(event.target.value)}
                     />
                     <select className="input" value={dsType} onChange={(event) => setDsType(event.target.value)}>
-                      {DS_TYPES.map((item) => (
+                      {datasourceTypeChoices.map((item) => (
                         <option key={item} value={item}>
                           {item}
                         </option>
@@ -577,9 +673,16 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                       </>
                     )}
                   </div>
-                  <button className="btn btn-primary mt-3" onClick={saveDatasource}>
-                    Add datasource
-                  </button>
+                  <div className="mt-3 flex gap-2">
+                    <button className="btn btn-primary" onClick={saveDatasource}>
+                      {editingDatasource ? 'Save changes' : 'Add datasource'}
+                    </button>
+                    {editingDatasource && (
+                      <button className="btn" onClick={resetDatasourceForm}>
+                        Cancel
+                      </button>
+                    )}
+                  </div>
                 </div>
               </section>
             )}

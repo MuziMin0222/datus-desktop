@@ -12,12 +12,33 @@ interface SSESpec {
   data: unknown
 }
 
+interface ChatSessionFixture {
+  session_id: string
+  user_query: string
+  created_at: string
+  last_updated: string
+  total_turns: number
+  token_count: number
+}
+
+interface ModelConfigFixture {
+  type: string
+  model: string
+  [key: string]: unknown
+}
+
+interface DatasourceConfigFixture {
+  type: string
+  default?: boolean
+  [key: string]: unknown
+}
+
 interface AgentConfigFixture {
   target: string
   target_provider?: string
   target_model?: string
-  models: Record<string, { type: string; model: string }>
-  datasources: Record<string, { type: string; default?: boolean }>
+  models: Record<string, ModelConfigFixture>
+  datasources: Record<string, DatasourceConfigFixture>
   current_datasource: string
   home: string
 }
@@ -90,12 +111,22 @@ const CHAT_FRAMES: SSESpec[] = [
   { id: 7, event: 'end', data: { session_id: 'e2e-session' } }
 ]
 
+function framesForSession(sessionId: string): SSESpec[] {
+  return CHAT_FRAMES.map((frame) =>
+    frame.event === 'session'
+      ? { ...frame, data: { ...(frame.data as Record<string, unknown>), session_id: sessionId } }
+      : frame
+  )
+}
+
 let server: Server
 let app: ElectronApplication
 let page: Page
 let baseUrl: string
 let modelUpdates: ModelUpdate[] = []
 let datasourceUpdates: DatasourceUpdate[] = []
+let chatRequests: Record<string, unknown>[] = []
+let sessionFixtures: ChatSessionFixture[] = []
 let failedConfigUpdate: 'models' | 'datasources' | null = null
 let agentConfig: AgentConfigFixture = {
   target: 'mock_model',
@@ -126,7 +157,11 @@ test.beforeAll(async () => {
       return
     }
     if (url.pathname === '/api/v1/chat/sessions') {
-      json(response, { success: true, data: { sessions: [], total_count: 0 } })
+      json(response, { success: true, data: { sessions: sessionFixtures, total_count: sessionFixtures.length } })
+      return
+    }
+    if (url.pathname === '/api/v1/chat/history') {
+      json(response, { success: true, data: { messages: [] } })
       return
     }
     if (url.pathname === '/api/v1/config/agent') {
@@ -181,8 +216,17 @@ test.beforeAll(async () => {
       return
     }
     if (request.method === 'POST' && url.pathname === '/api/v1/chat/stream') {
-      request.resume()
-      sse(response, CHAT_FRAMES)
+      let body = ''
+      request.setEncoding('utf8')
+      request.on('data', (chunk: string) => {
+        body += chunk
+      })
+      request.on('end', () => {
+        const update = JSON.parse(body) as Record<string, unknown>
+        chatRequests.push(update)
+        const agent = typeof update.subagent_id === 'string' ? update.subagent_id : 'chat'
+        sse(response, framesForSession(`${agent}_session_e2e`))
+      })
       return
     }
     if (request.method === 'DELETE') {
@@ -229,11 +273,15 @@ test.afterAll(async () => {
 test.afterEach(async () => {
   const close = page.getByRole('button', { name: 'Close', exact: true })
   if (await close.isVisible()) await close.click()
+  const newChat = page.getByRole('button', { name: '+ New chat' })
+  if (await newChat.isVisible()) await newChat.click()
 })
 
 test.beforeEach(() => {
   modelUpdates = []
   datasourceUpdates = []
+  chatRequests = []
+  sessionFixtures = []
   failedConfigUpdate = null
   agentConfig = {
     target: 'mock_model',
@@ -274,6 +322,77 @@ test('connects to a remote backend and completes a scripted chat turn', async ()
   await page.getByRole('button', { name: 'Close', exact: true }).click()
 })
 
+test('new chats auto-route and slash commands pin a new chat to one agent', async () => {
+  const composer = page.getByPlaceholder(/Ask about your data/)
+  await composer.fill('How many schools are there?')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Hello from the mock agent.')).toBeVisible()
+
+  expect(chatRequests.at(-1)).toMatchObject({
+    message: 'How many schools are there?',
+    source: 'desktop'
+  })
+  expect(chatRequests.at(-1)).not.toHaveProperty('subagent_id')
+  await expect(page.getByTestId('agent-mode')).toHaveText('Auto')
+
+  await page.getByRole('button', { name: '+ New chat' }).click()
+  await composer.fill('/')
+  await expect(page.getByRole('option', { name: /Gen SQL/ })).toBeVisible()
+  await page.getByRole('option', { name: /Gen SQL/ }).click()
+  await expect(composer).toHaveValue('/sql ')
+
+  await composer.fill('/sql Show monthly revenue')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Hello from the mock agent.')).toBeVisible()
+
+  expect(chatRequests.at(-1)).toMatchObject({
+    message: 'Show monthly revenue',
+    subagent_id: 'gen_sql'
+  })
+  await expect(page.getByTestId('agent-mode')).toHaveText('Gen SQL')
+})
+
+test('lists every agent session and keeps an existing session agent', async () => {
+  sessionFixtures = [
+    {
+      session_id: 'gen_sql_session_old',
+      user_query: 'Old SQL request',
+      created_at: '2026-11-25T00:00:00Z',
+      last_updated: '2026-11-25T00:00:00Z',
+      total_turns: 2,
+      token_count: 20
+    }
+  ]
+  await page.getByRole('button', { name: '+ New chat' }).click()
+  await expect(page.locator('aside').getByText(/Gen SQL/)).toBeVisible()
+  await page.getByText('Old SQL request').click()
+
+  const composer = page.getByPlaceholder(/Ask about your data/)
+  await composer.fill('Add a filter')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Hello from the mock agent.')).toBeVisible()
+
+  expect(chatRequests.at(-1)).toMatchObject({
+    message: 'Add a filter',
+    subagent_id: 'gen_sql'
+  })
+  await expect(page.getByTestId('agent-mode')).toHaveText('Gen SQL')
+})
+
+test('rejects switching agents inside an existing session', async () => {
+  const composer = page.getByPlaceholder(/Ask about your data/)
+  await composer.fill('How many schools are there?')
+  await page.getByRole('button', { name: 'Send' }).click()
+  await expect(page.getByText('Hello from the mock agent.')).toBeVisible()
+  const requestCount = chatRequests.length
+
+  await composer.fill('/sql Show monthly revenue')
+  await page.getByRole('button', { name: 'Send' }).click()
+
+  await expect(page.getByText('Start a new chat to switch agents; this session uses Chat.')).toBeVisible()
+  expect(chatRequests.length).toBe(requestCount)
+})
+
 test('model selection reports the active choice and switches targets', async () => {
   await page.getByRole('button', { name: 'Settings' }).click()
   await page.getByRole('button', { name: 'Models', exact: true }).click()
@@ -291,6 +410,111 @@ test('model selection reports the active choice and switches targets', async () 
   await expect(secondaryModel).toBeChecked()
   await expect(activeModel).not.toBeChecked()
   await expect(page.getByText('Active model: secondary_model')).toBeVisible()
+})
+
+test('edits a configured model without changing the active target', async () => {
+  agentConfig.models.mock_model = {
+    type: 'openai',
+    model: 'old-model',
+    base_url: 'https://old.example/v1',
+    api_key: 'sk-old',
+    max_retry: 3
+  }
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Models', exact: true }).click()
+  await page.getByRole('button', { name: 'Edit mock_model', exact: true }).click()
+
+  await expect(page.getByText('Edit model', { exact: true })).toBeVisible()
+  const alias = page.getByPlaceholder('alias (e.g. my-gpt)')
+  await expect(alias).toHaveValue('mock_model')
+  await expect(page.getByPlaceholder('model id (e.g. gpt-4.1)')).toHaveValue('old-model')
+  await expect(page.getByPlaceholder('base_url (optional)')).toHaveValue('https://old.example/v1')
+  await expect(page.getByPlaceholder('api key (optional if provider env var is set)')).toHaveValue('sk-old')
+
+  await page.getByPlaceholder('model id (e.g. gpt-4.1)').fill('new-model')
+  await page.getByPlaceholder('base_url (optional)').fill('https://new.example/v1')
+  await page.getByPlaceholder('api key (optional if provider env var is set)').fill('sk-new')
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click()
+
+  await expect(page.getByRole('status')).toHaveText('Saved model "mock_model".')
+  expect(modelUpdates.at(-1)).toEqual({
+    models: {
+      mock_model: {
+        type: 'openai',
+        model: 'new-model',
+        base_url: 'https://new.example/v1',
+        api_key: 'sk-new',
+        max_retry: 3
+      },
+      secondary_model: { type: 'deepseek', model: 'secondary-model' }
+    }
+  })
+  expect(agentConfig.target).toBe('mock_model')
+  await expect(page.getByLabel('Activate mock_model')).toBeChecked()
+})
+
+test('edits a configured datasource and preserves unmanaged fields', async () => {
+  agentConfig.datasources.analytics = {
+    type: 'postgresql',
+    host: 'old-host',
+    port: 5432,
+    username: 'old-user',
+    password: 'old-pass',
+    database: 'old-db',
+    schema: 'analytics',
+    default: false
+  }
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Datasources', exact: true }).click()
+  await page.getByRole('button', { name: 'Edit analytics', exact: true }).click()
+
+  await expect(page.getByText('Edit datasource', { exact: true })).toBeVisible()
+  await expect(page.getByPlaceholder('name', { exact: true })).toHaveValue('analytics')
+  await expect(page.getByPlaceholder('host', { exact: true })).toHaveValue('old-host')
+  await expect(page.getByPlaceholder('password')).toHaveValue('old-pass')
+
+  await page.getByPlaceholder('host').fill('new-host')
+  await page.getByPlaceholder('port').fill('6543')
+  await page.getByPlaceholder('database').fill('new-db')
+  await page.getByPlaceholder('password').fill('new-pass')
+  await page.getByRole('button', { name: 'Save changes', exact: true }).click()
+
+  await expect(page.getByRole('status')).toHaveText('Saved datasource "analytics".')
+  expect(datasourceUpdates.at(-1)).toEqual({
+    datasources: {
+      demo: { type: 'sqlite' },
+      analytics: {
+        type: 'postgresql',
+        host: 'new-host',
+        port: 6543,
+        username: 'old-user',
+        password: 'new-pass',
+        database: 'new-db',
+        schema: 'analytics',
+        default: false
+      }
+    }
+  })
+  expect(agentConfig.current_datasource).toBe('demo')
+})
+
+test('cancelling edit does not write models or datasources', async () => {
+  await page.getByRole('button', { name: 'Settings' }).click()
+  await page.getByRole('button', { name: 'Models', exact: true }).click()
+  await page.getByRole('button', { name: 'Edit mock_model', exact: true }).click()
+  await page.getByPlaceholder('model id (e.g. gpt-4.1)').fill('should-not-save')
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+
+  await expect(page.getByText('Edit model', { exact: true })).toHaveCount(0)
+  expect(modelUpdates).toEqual([])
+
+  await page.getByRole('button', { name: 'Datasources', exact: true }).click()
+  await page.getByRole('button', { name: 'Edit demo', exact: true }).click()
+  await page.getByPlaceholder('/path/to/database.sqlite').fill('should-not-save')
+  await page.getByRole('button', { name: 'Cancel', exact: true }).click()
+
+  await expect(page.getByText('Edit datasource', { exact: true })).toHaveCount(0)
+  expect(datasourceUpdates).toEqual([])
 })
 
 test('deletes the active model and the last remaining model', async () => {

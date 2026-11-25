@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-D22128?logo=apache&logoColor=white" alt="License: Apache 2.0"></a>
   <img src="https://img.shields.io/badge/Electron-38-47848F?logo=electron&logoColor=white" alt="Electron 38">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" alt="React 19">
-  <img src="https://img.shields.io/badge/version-0.4.7-informational" alt="Version 0.4.7">
+  <img src="https://img.shields.io/badge/version-0.4.8-informational" alt="Version 0.4.8">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(remote)-informational" alt="Platforms">
   <a href="https://join.slack.com/t/datus-ai/shared_invite/zt-3g6h4fsdg-iOl5uNoz6A4GOc4xKKWUYg"><img src="https://img.shields.io/badge/Slack-join%20chat-4A154B?logo=slack&logoColor=white" alt="Slack"></a>
 </p>
@@ -44,8 +44,8 @@ and `X-Datus-User-Id` header for the configured backend origin only. Tokens live
 ## Features
 
 - **Chat**: streaming markdown, thinking blocks, tool-call cards, interactive confirmations, stop/steer, token usage.
-- **Sub-agents**: Chat, Gen SQL, Ask Metrics, Semantic Modeling, Visual Report, Visual Dashboard, Gen Table, Gen Job.
-- **Sessions**: per-agent history, restore, delete.
+- **Automatic sub-agents**: Chat routes natural-language requests to Gen SQL, Ask Metrics, Semantic Modeling, Visual Report, Visual Dashboard, Gen Table, or Gen Job; pin one in a new chat with commands such as `/sql` and `/metrics`.
+- **Sessions**: history across all agents, restore, delete.
 - **Settings**: model providers, datasources, permission profiles, workspace, connection, logs.
 - **Artifacts**: in-app report and dashboard preview through the `datus-artifact://` protocol and the vendored
   `@datus/web-artifact-render` bundle.

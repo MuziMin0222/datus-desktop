@@ -10,11 +10,12 @@ import {
   type WriteStream
 } from 'node:fs'
 import { createServer } from 'node:net'
-import { join } from 'node:path'
+import { dirname, join } from 'node:path'
 import { parse as parseYaml, stringify as stringifyYaml } from 'yaml'
 
 import type { DesktopSettings, SidecarStatus } from '@shared/ipc'
 import { run, runCapture } from './exec'
+import { prependPathDir } from './pathEnv'
 import { sanitizeProxyEnv } from './proxyEnv'
 import { devPythonPath, ensureDirs, isDev, localModeSupported, paths, resolveWorkspace, resourcePath } from './paths'
 
@@ -265,13 +266,18 @@ export class LocalBackend {
     this.log(`spawning: ${python} ${args.join(' ')} (cwd=${workspace})`)
     const child = spawn(python, args, {
       cwd: workspace,
-      env: sanitizeProxyEnv({
-        ...process.env,
-        PYTHONUNBUFFERED: '1',
-        DATUS_API_TOKEN: this.token,
-        FASTEMBED_CACHE_PATH: p.fastembedCache,
-        UV_CACHE_DIR: p.uvCache
-      }),
+      env: sanitizeProxyEnv(
+        prependPathDir(
+          {
+            ...process.env,
+            PYTHONUNBUFFERED: '1',
+            DATUS_API_TOKEN: this.token,
+            FASTEMBED_CACHE_PATH: p.fastembedCache,
+            UV_CACHE_DIR: p.uvCache
+          },
+          dirname(p.uvPath)
+        )
+      ),
       stdio: ['ignore', 'pipe', 'pipe']
     })
     this.child = child
