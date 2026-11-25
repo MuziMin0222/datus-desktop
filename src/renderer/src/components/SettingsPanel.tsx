@@ -12,6 +12,8 @@ interface Props {
 
 interface AgentConfigSummary {
   target?: string
+  target_provider?: string
+  target_model?: string
   models?: Record<string, Record<string, unknown>>
   datasources?: Record<string, Record<string, unknown>>
   current_datasource?: string
@@ -173,18 +175,15 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
     setError(null)
     setMessage(null)
     const models = { ...(agentConfig?.models ?? {}) }
-    if (alias === agentConfig?.target) {
-      setError('Switch to another model before deleting this one.')
-      return
-    }
-    if (Object.keys(models).length <= 1) {
-      setError('Keep at least one model configured.')
-      return
-    }
     if (!window.confirm(`Delete model "${alias}"?`)) return
     delete models[alias]
+    const providerTarget = Boolean(agentConfig?.target_provider && agentConfig?.target_model)
+    const payload: { models: Record<string, Record<string, unknown>>; target?: string | null } = { models }
+    if (!providerTarget && alias === agentConfig?.target) {
+      payload.target = Object.keys(models)[0] ?? null
+    }
     try {
-      await apiPut(baseUrl, '/api/v1/config/models', { models })
+      await apiPut(baseUrl, '/api/v1/config/models', payload)
       await loadAgentConfig()
       setMessage(`Deleted model "${alias}".`)
     } catch (cause) {
@@ -224,8 +223,33 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
     }
   }
 
+  async function deleteDatasource(name: string): Promise<void> {
+    setError(null)
+    setMessage(null)
+    const datasources = { ...(agentConfig?.datasources ?? {}) }
+    if (!window.confirm(`Delete datasource "${name}"?`)) return
+    delete datasources[name]
+    if (name === agentConfig?.current_datasource) {
+      const next = Object.keys(datasources)[0]
+      for (const key of Object.keys(datasources)) {
+        datasources[key] = { ...datasources[key], default: key === next }
+      }
+    }
+    try {
+      await apiPut(baseUrl, '/api/v1/config/datasources', { datasources })
+      await loadAgentConfig()
+      setMessage(`Deleted datasource "${name}".`)
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : String(cause))
+    }
+  }
+
   const modelEntries = Object.entries(agentConfig?.models ?? {})
-  const activeTarget = agentConfig?.target ?? ''
+  const providerTarget =
+    agentConfig?.target_provider && agentConfig?.target_model
+      ? `${agentConfig.target_provider}/${agentConfig.target_model}`
+      : ''
+  const activeTarget = providerTarget ? '' : (agentConfig?.target ?? '')
 
   return (
     <div className="fixed inset-0 z-10 grid place-items-center overflow-auto bg-black/60 p-6" onClick={onClose}>
@@ -305,13 +329,24 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                   <div>
                     <h3 className="text-lg font-semibold">Models</h3>
                     <p className="mt-1 text-xs text-[var(--muted)]">
-                      Manage custom models with your own API key. Active target: {activeTarget || 'none'}
+                      Manage custom models with your own API key. Active target: {activeTarget || providerTarget || 'none'}
                     </p>
                   </div>
                   <button className="btn btn-primary" onClick={() => setShowModelForm((value) => !value)}>
                     + Add model
                   </button>
                 </div>
+
+                {message && (
+                  <p role="status" aria-live="polite" className="mt-3 text-xs text-emerald-400">
+                    {message}
+                  </p>
+                )}
+                {error && (
+                  <p role="alert" className="mt-3 text-xs text-[var(--danger)]">
+                    {error}
+                  </p>
+                )}
 
                 <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-2)]">
                   {modelEntries.length === 0 && (
@@ -342,32 +377,29 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                             active
                           </span>
                         )}
-                        <button
-                          role="switch"
-                          aria-checked={active}
+                        <input
+                          type="radio"
+                          name="active-model"
                           aria-label={`Activate ${alias}`}
+                          title={active ? 'Already active' : `Use ${alias}`}
+                          checked={active}
+                          onChange={() => void activateModel(alias)}
                           onClick={() => {
-                            if (!active) void activateModel(alias)
+                            if (!active) return
+                            setError(null)
+                            setMessage(`"${alias}" is already the active model.`)
                           }}
-                          className={`relative h-5 w-9 shrink-0 rounded-full transition ${
-                            active ? 'bg-[var(--accent)]' : 'bg-[#2a3644]'
-                          }`}
+                          className="h-4 w-4 shrink-0 cursor-pointer accent-[var(--accent)]"
+                        />
+                        <button
+                          type="button"
+                          className="text-xs text-[var(--muted)] hover:text-[var(--danger)]"
+                          aria-label={`Delete ${alias}`}
+                          title={`Delete ${alias}`}
+                          onClick={() => void deleteModel(alias)}
                         >
-                          <span
-                            className={`absolute top-0.5 h-4 w-4 rounded-full bg-white transition-all ${
-                              active ? 'left-[18px]' : 'left-0.5'
-                            }`}
-                          />
+                          ×
                         </button>
-                        {!active && modelEntries.length > 1 && (
-                          <button
-                            className="text-xs text-[var(--muted)] hover:text-[var(--danger)]"
-                            title={`Delete ${alias}`}
-                            onClick={() => void deleteModel(alias)}
-                          >
-                            ×
-                          </button>
-                        )}
                       </div>
                     )
                   })}
@@ -438,6 +470,17 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                   {Object.keys(agentConfig?.datasources ?? {}).length}
                 </p>
 
+                {message && (
+                  <p role="status" aria-live="polite" className="mt-3 text-xs text-emerald-400">
+                    {message}
+                  </p>
+                )}
+                {error && (
+                  <p role="alert" className="mt-3 text-xs text-[var(--danger)]">
+                    {error}
+                  </p>
+                )}
+
                 <div className="mt-4 overflow-hidden rounded-xl border border-[var(--border)] bg-[var(--panel-2)]">
                   {Object.entries(agentConfig?.datasources ?? {}).map(([name, config]) => {
                     const active = name === agentConfig?.current_datasource
@@ -458,6 +501,15 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
                             active
                           </span>
                         )}
+                        <button
+                          type="button"
+                          className="text-xs text-[var(--muted)] hover:text-[var(--danger)]"
+                          aria-label={`Delete ${name}`}
+                          title={`Delete ${name}`}
+                          onClick={() => void deleteDatasource(name)}
+                        >
+                          ×
+                        </button>
                       </div>
                     )
                   })}
@@ -556,8 +608,12 @@ export function SettingsPanel({ snapshot, onClose, onReconfigure, onRefresh }: P
               </section>
             )}
 
-            {message && <p className="mt-4 text-xs text-emerald-400">{message}</p>}
-            {error && <p className="mt-4 text-xs text-[var(--danger)]">{error}</p>}
+            {tab !== 'models' && tab !== 'datasources' && message && (
+              <p className="mt-4 text-xs text-emerald-400">{message}</p>
+            )}
+            {tab !== 'models' && tab !== 'datasources' && error && (
+              <p className="mt-4 text-xs text-[var(--danger)]">{error}</p>
+            )}
           </div>
         </div>
       </div>
