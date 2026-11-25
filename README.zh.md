@@ -6,7 +6,7 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/License-Apache%202.0-D22128?logo=apache&logoColor=white" alt="License: Apache 2.0"></a>
   <img src="https://img.shields.io/badge/Electron-38-47848F?logo=electron&logoColor=white" alt="Electron 38">
   <img src="https://img.shields.io/badge/React-19-61DAFB?logo=react&logoColor=20232A" alt="React 19">
-  <img src="https://img.shields.io/badge/version-0.4.6-informational" alt="Version 0.4.6">
+  <img src="https://img.shields.io/badge/version-0.4.7-informational" alt="Version 0.4.7">
   <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux%20%7C%20Windows%20(remote)-informational" alt="Platforms">
   <a href="https://join.slack.com/t/datus-ai/shared_invite/zt-3g6h4fsdg-iOl5uNoz6A4GOc4xKKWUYg"><img src="https://img.shields.io/badge/Slack-join%20chat-4A154B?logo=slack&logoColor=white" alt="Slack"></a>
 </p>
