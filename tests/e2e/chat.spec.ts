@@ -127,6 +127,7 @@ let modelUpdates: ModelUpdate[] = []
 let datasourceUpdates: DatasourceUpdate[] = []
 let chatRequests: Record<string, unknown>[] = []
 let sessionFixtures: ChatSessionFixture[] = []
+let historyStatus = 200
 let failedConfigUpdate: 'models' | 'datasources' | null = null
 let agentConfig: AgentConfigFixture = {
   target: 'mock_model',
@@ -161,6 +162,10 @@ test.beforeAll(async () => {
       return
     }
     if (url.pathname === '/api/v1/chat/history') {
+      if (historyStatus !== 200) {
+        json(response, { detail: 'history archive unavailable' }, historyStatus)
+        return
+      }
       json(response, { success: true, data: { messages: [] } })
       return
     }
@@ -282,6 +287,7 @@ test.beforeEach(() => {
   datasourceUpdates = []
   chatRequests = []
   sessionFixtures = []
+  historyStatus = 200
   failedConfigUpdate = null
   agentConfig = {
     target: 'mock_model',
@@ -610,6 +616,26 @@ test('deleting a custom model preserves the active provider model', async () => 
   })
   expect(agentConfig.target_provider).toBe('openai')
   expect(agentConfig.target_model).toBe('provider-model')
+})
+
+test('shows a retryable message when chat history is temporarily unavailable', async () => {
+  historyStatus = 503
+  sessionFixtures = [
+    {
+      session_id: 'gen_sql_session_archived',
+      user_query: 'Archived SQL request',
+      created_at: '2026-11-25T00:00:00Z',
+      last_updated: '2026-11-25T00:00:00Z',
+      total_turns: 2,
+      token_count: 20
+    }
+  ]
+
+  await page.getByRole('button', { name: '+ New chat' }).click()
+  await expect(page.getByText('Archived SQL request')).toBeVisible()
+  await page.getByText('Archived SQL request').click()
+
+  await expect(page.getByRole('alert')).toHaveText('Chat history is temporarily unavailable. Please retry.')
 })
 
 test('cancelling deletion keeps models and datasources', async () => {

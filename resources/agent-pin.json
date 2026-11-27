@@ -1,6 +1,6 @@
 {
-  "datusAgentVersion": "0.4.6",
+  "datusAgentVersion": "0.4.9",
   "pythonVersion": "3.12",
   "uvVersion": "0.9.0",
-  "datusAgentWheel": "https://github.com/MuziMin0222/datus-agent/releases/download/v0.4.6/datus_agent-0.4.6-py3-none-any.whl"
+  "datusAgentWheel": "https://github.com/MuziMin0222/datus-agent/releases/download/v0.4.9/datus_agent-0.4.9-py3-none-any.whl"
 }
