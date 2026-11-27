@@ -2,7 +2,7 @@ import { useCallback, useEffect, useReducer, useRef, useState } from 'react'
 
 import type { ChatSessionItem, ChatSessionList, SSEMessagePayload } from '@shared/chat'
 import type { BootstrapSnapshot, PermissionProfile } from '@shared/ipc'
-import { apiGet, apiPost } from '../api/client'
+import { ApiError, apiGet, apiPost } from '../api/client'
 import { decodeFrame, resumeChat, streamChat, type DecodedFrame } from '../api/sse'
 import { SLASH_COMMANDS, agentFromSessionId, chatAgent, parseSlashCommand } from '../chatAgents'
 import { chatReducer, collectToolResults, initialChatState, messagesFromHistory } from '../state/chatReducer'
@@ -110,7 +110,13 @@ export function ChatView({ snapshot, onRefresh, onReconfigure }: Props) {
       )
       dispatch({ type: 'history', messages: messagesFromHistory(data.messages ?? []), sessionId: session.session_id })
     } catch (cause) {
-      dispatch({ type: 'fail', message: cause instanceof Error ? cause.message : String(cause) })
+      const message =
+        cause instanceof ApiError && cause.status === 503
+          ? 'Chat history is temporarily unavailable. Please retry.'
+          : cause instanceof Error
+            ? cause.message
+            : String(cause)
+      dispatch({ type: 'fail', message })
     }
   }
 
